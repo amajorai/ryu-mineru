@@ -1,0 +1,47 @@
+[project]
+name = "ryu-mineru-sidecar"
+version = "0.1.0"
+description = "Ryu's Core-managed MinerU document-parsing sidecar (document.parse backend)"
+# MinerU itself supports 3.10-3.13. The server half is happy anywhere from 3.10,
+# and the process must still boot on a host where MinerU cannot be installed —
+# that is how a user finds out why.
+requires-python = ">=3.10"
+# Base server deps only. MinerU is optional so the process boots and answers
+# /health + /capability on any machine; a missing parser becomes a typed per-job
+# error (`library_missing`), never a boot crash.
+dependencies = [
+    # Starlette 0.49.1 fixes the multipart-buffering, spool, and Range advisories
+    # (PYSEC-2026-1941/1942/1943); FastAPI 0.120.1 is the first release whose Starlette
+    # range (<0.50) admits it.
+    # The 1.x-only fixes (PYSEC-2026-161/248/249/2280/2281) cannot be required here:
+    # mineru 3.x pins gradio<6.9, which caps Starlette below 1.0. Lifting that needs
+    # the mineru 4 migration noted on the extras below.
+    "fastapi>=0.120.1",
+    "starlette>=0.49.1",
+    "uvicorn>=0.29",
+    "pydantic>=2.7.0",
+]
+
+[project.optional-dependencies]
+# `pip install -e ".[all]"` — the manifest's `pyproject_extra`. This is the heavy
+# one: torch, the layout/formula/table models' loaders, and the VLM backends.
+# Budget several GB and a long install. Models themselves download on first
+# parse, into HF_HOME (the manifest pins it under ${RYU_DIR}).
+all = ["mineru[all]>=3.0,<4"]
+# Floored at 3.0: MinerU 2.x pinned pdfminer.six==20250506 (PYSEC-2026-1761/1762,
+# pickle CMap code execution); 3.0 requires the fixed >=20251230.
+# Capped below 4.x: mineru 4 dropped the `core` extra and the `-p/-o/-b` CLI
+# flags `ryu_mineru/cli.py` drives.
+# Pipeline backend only — CPU-capable, no vLLM/sglang stack. Much cheaper, and
+# the right choice on a machine without a GPU.
+core = ["mineru[core]>=3.0,<4"]
+
+[project.scripts]
+ryu-mineru = "ryu_mineru.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ryu_mineru"]
